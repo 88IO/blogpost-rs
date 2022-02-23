@@ -1,0 +1,14 @@
+[package]
+name = "blogpost-rs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serenity = { version = "0.10", default-features = false, features = ["client", "gateway", "cache", "rustls_backend", "model"] }
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+regex = "1"
+once_cell = "1"
+dotenv = "0.15"
+egg-mode = "0.16"
