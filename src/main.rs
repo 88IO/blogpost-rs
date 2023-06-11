@@ -1,22 +1,24 @@
 use std::env;
 use dotenv::dotenv;
 use regex::Regex;
-use egg_mode::{
-    KeyPair,
-    Token,
-    tweet,
-};
+// use egg_mode::{
+//     KeyPair,
+//     Token,
+//     tweet,
+// };
+use tweers::Twitter;
 use serenity::{
     async_trait,
     model::{channel::Message, gateway::Ready, user::User},
     prelude::*,
 };
+use std::collections::HashMap;
 
 struct Handler {
     re_id: Regex,
     re_meta: Regex,
     twitter_status_url: String,
-    twitter_token: Token,
+    twitter: Twitter,
 }
 
 #[async_trait]
@@ -32,25 +34,33 @@ impl EventHandler for Handler {
 
             let content = self.re_meta.replace_all(&target_msg.content, "").trim().to_string();
 
+            println!("{}", content);
+
             if content.is_empty() {
                 let _ = target_msg.reply(&ctx.http, "メッセージが空です").await;
                 return;
             }
 
-            println!("Content: {}", &content);
-
             if let Some(caps) = self.re_id.captures(&content) {
                 println!("  Delete tweet:");
                 let id: u64 = caps["id"].parse().unwrap();
-                tweet::delete(id, &self.twitter_token).await.expect("Failed to delete.");
+                //tweet::delete(id, &self.twitter_token).await.expect("Failed to delete.");
+                let res = self.twitter.delete(&format!("tweets/{}", id), HashMap::new()).await.unwrap();
+                println!("{:?}", res);
 
                 let _ = target_msg.react(&ctx.http, '❌').await;
             } else {
                 println!("  Draft tweet:");
-                let tweet = tweet::DraftTweet::new(content)
-                    .send(&self.twitter_token)
-                    .await.expect("Failed to draft.");
-                let _ = target_msg.reply(&ctx.http, format!("<{}/{}>", &self.twitter_status_url, tweet.id)).await;
+                // let tweet = tweet::DraftTweet::new(content)
+                //     .send(&self.twitter_token)
+                //     .await.expect("Failed to draft.");
+                let mut params = HashMap::new();
+                params.insert("text", content.as_str());
+                let res = self.twitter.post("tweets", params).await.unwrap();
+                println!("{:?}", res);
+                let id = res["data"]["id"].as_str().unwrap();
+            
+                let _ = target_msg.reply(&ctx.http, format!("<{}/{}>", &self.twitter_status_url, id)).await;
 
                 let _ = target_msg.react(&ctx.http, '💬').await;
             }
@@ -75,16 +85,23 @@ async fn main() {
     let twitter_status_url = format!("https://twitter.com/{}/status", twitter_account);
 
     let re_id = Regex::new(&format!(r"^<?{}/(?P<id>\d+)?>", twitter_status_url)).unwrap();
-    let re_meta = Regex::new(r"<(@!|#)\d+>").unwrap();
+    let re_meta = Regex::new(r"<(@|@!|#)\d+>").unwrap();
 
-    let twitter_token = Token::Access {
-        consumer: KeyPair::new(consumer_key, consumer_secret),
-        access: KeyPair::new(access_token, access_token_secret),
-    };
+    // let twitter_token = Token::Access {
+    //     consumer: KeyPair::new(consumer_key, consumer_secret),
+    //     access: KeyPair::new(access_token, access_token_secret),
+    // };
+
+    let twitter = Twitter::new(
+        consumer_key,
+        consumer_secret,
+        access_token,
+        access_token_secret
+    );
 
     let mut client = Client::builder(&discord_token)
         .event_handler(Handler {
-            re_id, re_meta, twitter_status_url, twitter_token
+            re_id, re_meta, twitter_status_url, twitter
         })
         .await.expect("Error creating client.");
 
